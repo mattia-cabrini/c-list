@@ -10,52 +10,36 @@ typedef struct node_t {
   struct node_t *next;
 } *node;
 
-/* Heads, Tails and sizes */
-static node *H = NULL;
-static node *T = NULL;
-static int  *S = NULL;
+typedef struct {
+  node H;
+  node T;
+  int size;
+  itemfree_t itemfree;
+  int isel;
+  node selected;
+} list;
 
-/* Item Frees */
-static itemfree_t *IF = NULL;
+list *L = NULL;
 
 /* Current amount of lists */
 static int ln = 0;
 
-/* Cache for select */
-static node *cSel = NULL;
-static int  *iSel = NULL;
-
-static void* realloc_X(void *X, int DIM, size_t size) {
-  int i;
-  char *X2;
-
-  X2 = (char* ) malloc( (DIM + 1) * size );
-
-  if ( DIM != 0 ) {
-    memcpy(X2, X, DIM * size);
-    free(X);
-  }
-
-  return X2;
+static list struct_list_init(int size, itemfree_t itemfree) {
+  list l;
+  l.H = NULL;
+  l.T = NULL;
+  l.size = size;
+  l.itemfree = itemfree;
+  l.selected = NULL;
+  l.isel = -1;
+  return l;
 }
 
 static void realloc_L() {
-  H = realloc_X(H, ln, sizeof(struct node_t));
-  T = realloc_X(T, ln, sizeof(struct node_t));
-  S = realloc_X(S, ln, sizeof(int));
-
-  IF = realloc_X(IF, ln, sizeof(itemfree_t));
-
-  cSel = realloc_X(cSel, ln, sizeof(struct node_t));
-  iSel = realloc_X(iSel, ln, sizeof(int));
-
-  H[ln] = NULL;
-  T[ln] = NULL;
-  S[ln] = 0;
-  IF[ln] = NULL;
-  cSel[ln] = NULL;
-  iSel[ln] = 0;
-
+  list *L2 = (list*) malloc( (ln + 1) * sizeof(list) );
+  memcpy(L2, L, ln * sizeof(list));
+  if ( L != NULL ) free(L);
+  L = L2;
   ++ln;
 }
 
@@ -63,7 +47,7 @@ static int get_ld() {
   int i;
 
   for ( i = 0; i < ln; ++i )
-    if ( S[i] == -1 )
+    if ( L[i].size == -1 )
       return i;
 
   realloc_L();
@@ -76,8 +60,7 @@ int list_init(itemfree_t itemfree) {
   if ( ld == -1 )
     return -1;
 
-  IF[ld] = itemfree;
-  S[ld] = 0;
+  L[ld] = struct_list_init(0, itemfree);
 
   return ld;
 }
@@ -85,20 +68,16 @@ int list_init(itemfree_t itemfree) {
 void list_free(int ld) {
   node tmp;
 
-  if ( S[ld] == -1 )
+  if ( L[ld].size == -1 )
     return;
 
-  while ( H[ld] != NULL ) {
-    tmp = H[ld]->next;
-    free(H[ld]);
-    H[ld] = tmp;
+  while ( L[ld].H != NULL ) {
+    tmp = L[ld].H->next;
+    free(L[ld].H);
+    L[ld].H = tmp;
   }
 
-  S[ld] = -1;
-  T[ld] = NULL;
-  IF[ld] = NULL;
-  iSel[ld] = -1;
-  cSel[ld] = NULL;
+  L[ld] = struct_list_init(-1, NULL);
 }
 
 static node node_create(void *item, node next) {
@@ -109,50 +88,50 @@ static node node_create(void *item, node next) {
 }
 
 static void reset_cache(int ld) {
-  iSel[ld] = 0;
-  cSel[ld] = H[ld];
+  L[ld].isel = 0;
+  L[ld].selected = L[ld].H;
 }
 
 int list_insert(int ld, void *item) {
-  if ( H[ld] == NULL ) {
-    H[ld] = T[ld] = node_create(item, NULL);
+  if ( L[ld].H == NULL ) {
+    L[ld].H = L[ld].T = node_create(item, NULL);
     reset_cache(ld);
   } else {
-    T[ld] = T[ld]->next = node_create(item, NULL);
+    L[ld].H = L[ld].H->next = node_create(item, NULL);
   }
 
-  return ++S[ld];
+  return ++L[ld].size;
 }
 
 int list_push(int ld, void *item) {
-  if ( S[ld] == 0 )
+  if ( L[ld].size == 0 )
     return list_insert(ld, item);
 
-  H[ld] = node_create(item, H[ld]);
+  L[ld].H = node_create(item, L[ld].H);
 
-  ++iSel[ld];
+  ++L[ld].isel;
 
-  return ++S[ld];
+  return ++L[ld].size;
 }
 
 void* list_pop(int ld) {
   void *item;
   node tmp;
 
-  if ( S[ld] == 0 )
+  if ( L[ld].size == 0 )
     return NULL;
 
-  item = H[ld]->I;
-  tmp = H[ld]->next;
-  free(H[ld]);
-  H[ld] = tmp;
+  item = L[ld].H->I;
+  tmp = L[ld].H->next;
+  free(L[ld].H);
+  L[ld].H = tmp;
 
   if ( tmp == NULL )
-    T[ld] = NULL;
+    L[ld].H = NULL;
 
-  --S[ld];
+  --L[ld].size;
 
-  if ( --iSel[ld] == -1 )
+  if ( --L[ld].isel == -1 )
     reset_cache(ld);
 
   return item;
@@ -161,35 +140,35 @@ void* list_pop(int ld) {
 void* list_select(int ld, int i) {
   int j;
 
-  if ( i >= S[ld] )
+  if ( i >= L[ld].size )
     return NULL;
 
-  if ( iSel[ld] > i ) {
-    iSel[ld] = 0;
-    cSel[ld] = H[ld];
+  if ( L[ld].isel > i ) {
+    L[ld].isel = 0;
+    L[ld].selected = L[ld].H;
   }
 
-  for ( j = iSel[ld]; j < i; cSel[ld] = cSel[ld]->next, ++j );
-  iSel[ld] = i;
+  for ( j = L[ld].isel; j < i; L[ld].selected = L[ld].selected->next, ++j );
+  L[ld].isel = i;
 
-  return cSel[ld]->I;
+  return L[ld].selected->I;
 }
 
 static int list_count_items(int ld) {
   int i = 0;
-  node tmp = H[ld];
+  node tmp = L[ld].H;
 
-  for ( tmp = H[ld]; tmp != NULL; tmp = tmp->next, ++i );
+  for ( tmp = L[ld].H; tmp != NULL; tmp = tmp->next, ++i );
 
   return i;
 }
 
 int list_self_check(int ld) {
-  if ( H[ld] == NULL || T[ld] == NULL )
-    if ( H[ld] != NULL || T[ld] != NULL )
+  if ( L[ld].H == NULL || L[ld].H == NULL )
+    if ( L[ld].H != NULL || L[ld].H != NULL )
       return 0; // h null, t not null or vice versa
 
-  if ( S[ld] != list_count_items(ld) && S[ld] != -1 )
+  if ( L[ld].size != list_count_items(ld) && L[ld].size != -1 )
     return 0;
 
   return 1;
@@ -206,10 +185,6 @@ void list_unload() {
 
   ln = 0;
 
-  free(H);
-  free(T);
-  free(S);
-  free(IF);
-  free(iSel);
-  free(cSel);
+  free(L);
+  L = NULL;
 }
