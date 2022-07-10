@@ -4,7 +4,7 @@ Table of contents
 
 - [C-List](#c-list)
 - [Build and Test](#build-and-test)
-  - [Buld](#buld)
+  - [Build](#build)
   - [Include](#include)
   - [Test](#test)
 - [Usage](#usage)
@@ -28,7 +28,7 @@ Made as a general purpose library, `c-list` is implemented in order to handle an
 
 # Build and Test
 
-## Buld 
+## Build 
 
 The list implementation is contained in the file `list.c` and its header in the file `list.h`.
 
